@@ -1,0 +1,10 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "mkdir -p dist && echo \"<h1>live-commerce web (placeholder)</h1>\" > dist/index.html",
+    "lint": "echo \"no lint yet\"",
+    "test": "echo \"no tests yet\""
+  }
+}

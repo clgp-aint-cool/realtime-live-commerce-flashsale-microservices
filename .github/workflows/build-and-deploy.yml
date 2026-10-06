@@ -1,0 +1,104 @@
+name: build-and-deploy-dev
+
+# Push vào main -> build image -> đẩy lên Harbor -> cập nhật tag trong repo infra (môi trường dev).
+# ArgoCD thấy thay đổi trong repo infra và tự sync. Lên prod: dùng workflow "promote" bên repo infra.
+
+on:
+  push:
+    branches: [main]
+    paths: ['services/**', 'web/**']
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ${{ vars.HARBOR_REGISTRY }}      # ví dụ: harbor.example.local
+  PROJECT: live-commerce
+
+jobs:
+  changes:
+    runs-on: [self-hosted, linux]
+    outputs:
+      components: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            chat-service: ['services/chat-service/**']
+            product-service: ['services/product-service/**']
+            order-service: ['services/order-service/**']
+            moderation-service: ['services/moderation-service/**']
+            web: ['web/**']
+
+  build:
+    needs: changes
+    if: ${{ needs.changes.outputs.components != '[]' }}
+    runs-on: [self-hosted, linux]
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.changes.outputs.components) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve build context
+        id: ctx
+        run: |
+          if [ "${{ matrix.component }}" = "web" ]; then
+            echo "dir=web" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=services/${{ matrix.component }}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.ctx.outputs.dir }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ matrix.component }}:${{ steps.ctx.outputs.tag }}
+      # Tuỳ chọn: quét lỗ hổng image trước khi cho deploy (thêm bước Trivy ở đây).
+
+  update-manifests:
+    needs: [changes, build]
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.INFRA_REPO }}     # ví dụ: <ORG>/live-commerce-infra
+          token: ${{ secrets.INFRA_REPO_TOKEN }}
+          path: infra
+      - uses: imranismail/setup-kustomize@v2
+      - name: Bump image tags (dev)
+        env:
+          COMPONENTS: ${{ needs.changes.outputs.components }}
+        run: |
+          TAG="${GITHUB_SHA::8}"
+          for c in $(echo "$COMPONENTS" | jq -r '.[]'); do
+            case "$c" in
+              moderation-service) dir="apps/moderation/overlays/dev" ;;
+              *)                  dir="apps/live-commerce/overlays/dev" ;;
+            esac
+            img="${REGISTRY}/${PROJECT}/${c}"
+            (cd "infra/${dir}" && kustomize edit set image "${img}=${img}:${TAG}")
+          done
+      - name: Commit and push
+        run: |
+          cd infra
+          git config user.name "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "Không có thay đổi"; exit 0; fi
+          git commit -m "chore(dev): bump images to ${GITHUB_SHA::8}" -m "Source: ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+          ok=0
+          for i in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then ok=1; break; fi
+            sleep 5
+          done
+          [ "$ok" = 1 ]

@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: [self-hosted, linux]
+    outputs:
+      components: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            chat-service: ['services/chat-service/**']
+            product-service: ['services/product-service/**']
+            order-service: ['services/order-service/**']
+            moderation-service: ['services/moderation-service/**']
+            web: ['web/**']
+
+  test:
+    needs: changes
+    if: ${{ needs.changes.outputs.components != '[]' }}
+    runs-on: [self-hosted, linux]
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.changes.outputs.components) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.component == 'web' && 'web' || format('services/{0}', matrix.component) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Lint
+        run: npm run lint --if-present
+      - name: Test
+        run: npm test --if-present
+      - name: Docker build (không push)
+        run: docker build -t ci-check:${{ github.sha }} .
