@@ -31,6 +31,8 @@ jobs:
             product-service: ['services/product-service/**']
             order-service: ['services/order-service/**']
             moderation-service: ['services/moderation-service/**']
+            live-manager: ['services/live-manager/**']
+            auth-service: ['services/auth-service/**']
             web: ['web/**']
 
   build:

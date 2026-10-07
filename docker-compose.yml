@@ -1,16 +1,217 @@
-# Môi trường dev cục bộ: Redis + PostgreSQL. Các service chạy bằng `npm start` hoặc thêm vào file này.
+# Chạy toàn bộ app cục bộ, mô phỏng sát cách triển khai trên Kubernetes:
+#   - Kong làm gateway với cùng bảng route như kong-routes.yaml (cổng 8000)
+#   - chat-service, order-service, live-manager chạy 2 replica (giống Deployment replicas: 2)
+#     để kiểm chứng Redis adapter, Lua trừ kho nguyên tử và rate limit ghim xuyên nhiều instance
+#   - live-manager mặc định IVS_MODE=mock (không cần AWS). Dùng IVS thật: đặt IVS_MODE=aws + AWS_* trong .env
+#   - moderation-service mở cổng 3004 riêng, tương ứng NodePort moderation-webhook
+#
+#   docker compose up -d --build                       # chạy app: http://localhost:8000
+#   docker compose --profile test run --rm e2e         # test end-to-end
+#   docker compose --profile loadtest run --rm k6      # test tải chốt đơn trong live (5.000 request / 100 tồn kho)
+#   docker compose up -d postgres redis                # chỉ hạ tầng, chạy service bằng `npm run dev`
+name: live-commerce
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+x-common-env: &common-env
+  REDIS_URL: redis://redis:6379
+  DATABASE_URL: postgres://${POSTGRES_USER:-live}:${POSTGRES_PASSWORD:-live}@postgres:5432/${POSTGRES_DB:-livecommerce}
+
 services:
-  redis:
-    image: redis:7-alpine
-    ports: ["6379:6379"]
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: live
-      POSTGRES_PASSWORD: live
-      POSTGRES_DB: livecommerce
+      POSTGRES_USER: ${POSTGRES_USER:-live}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-live}
+      POSTGRES_DB: ${POSTGRES_DB:-livecommerce}
     ports: ["5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  product-service:
+    <<: *service-defaults
+    build: ./services/product-service
+    image: live-commerce/product-service:local
+    environment:
+      <<: *common-env
+      PORT: "3002"
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token} # live-manager thêm sản phẩm qua /internal/products
+
+  # Tài khoản người mua (đăng ký/đăng nhập, cấp JWT). order-service verify JWT bằng cùng JWT_SECRET.
+  auth-service:
+    <<: *service-defaults
+    build: ./services/auth-service
+    image: live-commerce/auth-service:local
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-live}:${POSTGRES_PASSWORD:-live}@postgres:5432/${POSTGRES_DB:-livecommerce}
+      PORT: "3006"
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-me-0123456789abcdef}
+
+  order-service:
+    <<: *service-defaults
+    build: ./services/order-service
+    image: live-commerce/order-service:local
+    deploy:
+      replicas: 1
+    environment:
+      <<: *common-env
+      PORT: "3003"
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-me-0123456789abcdef}
+      # true: khách chưa đăng nhập vẫn đặt được (e2e, k6). Production nên đặt false.
+      ALLOW_GUEST_ORDERS: ${ALLOW_GUEST_ORDERS:-true}
+
+  chat-service:
+    <<: *service-defaults
+    build: ./services/chat-service
+    image: live-commerce/chat-service:local
+    deploy:
+      replicas: 1
+    depends_on:
+      redis: { condition: service_healthy }
+    environment:
+      PORT: "3001"
+      REDIS_URL: redis://redis:6379
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
+
+  live-manager:
+    <<: *service-defaults
+    build: ./services/live-manager
+    image: live-commerce/live-manager:local
+    deploy:
+      replicas: 1
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      product-service: { condition: service_healthy }
+      chat-service: { condition: service_healthy }
+    environment:
+      <<: *common-env
+      PORT: "3005"
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      CHAT_SERVICE_URL: http://chat-service:3001
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
+      IVS_MODE: ${IVS_MODE:-mock}
+      # mock: mọi kênh phát luồng demo công khai của AWS IVS
+      MOCK_PLAYBACK_URL: ${MOCK_PLAYBACK_URL:-https://fcc3ddae59ed.us-west-2.playback.live-video.net/api/video/v1/us-west-2.893648527354.channel.DmumNckWFTqz.m3u8}
+      # aws: IAM user quyền tối thiểu (docs/iam-live-manager-policy.json)
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      IVS_RECORDING_CONFIGURATION_ARN: ${IVS_RECORDING_CONFIGURATION_ARN:-}
+
+  moderation-service:
+    <<: *service-defaults
+    build: ./services/moderation-service
+    image: live-commerce/moderation-service:local
+    depends_on:
+      postgres: { condition: service_healthy }
+      chat-service: { condition: service_healthy }
+      live-manager: { condition: service_healthy }
+    ports: ["3004:3004"] # tương ứng NodePort moderation-webhook trên K8s
+    environment:
+      <<: *common-env
+      PORT: "3004"
+      CHAT_SERVICE_URL: http://chat-service:3001
+      LIVE_MANAGER_URL: http://live-manager:3005
+      CHAT_ROOM: ${CHAT_ROOM:-main}
+      WEBHOOK_SHARED_SECRET: ${WEBHOOK_SHARED_SECRET:-dev-webhook-secret}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
+
+  web:
+    build: ./web
+    image: live-commerce/web:local
+    restart: unless-stopped
+    # Kong phân giải tên ngắn "web" ra 127.0.53.53 (".web" là TLD công khai) nên dùng alias riêng.
+    networks:
+      default:
+        aliases: [web-frontend]
+
+  kong:
+    image: kong:3.9
+    restart: unless-stopped
+    depends_on:
+      product-service: { condition: service_healthy }
+      order-service: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+      chat-service: { condition: service_healthy }
+      live-manager: { condition: service_healthy }
+      web: { condition: service_healthy }
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: "off"
+      # Mặc định = số CPU (10 worker, ~700 MB RAM). 2 worker đủ cho local và k6.
+      KONG_NGINX_WORKER_PROCESSES: "2"
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      # Phân giải lại DNS thường xuyên để thấy đủ các replica của docker compose.
+      KONG_DNS_STALE_TTL: "1"
+      KONG_DNS_VALID_TTL: "5"
+    volumes:
+      - ./deploy/kong/kong.yml:/kong/kong.yml:ro
+    ports: ["8000:8000"]
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Kiểm thử (chỉ chạy khi gọi profile) ----------
+  e2e:
+    profiles: [test]
+    build: ./tests/e2e
+    depends_on:
+      kong: { condition: service_healthy }
+      moderation-service: { condition: service_healthy }
+    environment:
+      GATEWAY_URL: http://kong:8000
+      CHAT_SERVICE_URL: http://chat-service:3001
+      MODERATION_URL: http://moderation-service:3004
+      LIVE_MANAGER_URL: http://live-manager:3005
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      WEBHOOK_SHARED_SECRET: ${WEBHOOK_SHARED_SECRET:-dev-webhook-secret}
+      CHAT_ROOM: ${CHAT_ROOM:-main}
+
+  k6:
+    profiles: [loadtest]
+    image: grafana/k6:latest
+    depends_on:
+      kong: { condition: service_healthy }
+    volumes:
+      - ./tests/k6:/scripts:ro
+    environment:
+      GATEWAY_URL: http://kong:8000
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      PRODUCT_ID: ${PRODUCT_ID:-1}
+      SELLER_TOKEN: ${SELLER_TOKEN:-}
+      STOCK: ${STOCK:-100}
+      REQUESTS: ${REQUESTS:-5000}
+      VUS: ${VUS:-200}
+    command: run /scripts/live-order.js
+
 volumes:
   pgdata:

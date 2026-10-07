@@ -23,6 +23,8 @@ jobs:
             product-service: ['services/product-service/**']
             order-service: ['services/order-service/**']
             moderation-service: ['services/moderation-service/**']
+            live-manager: ['services/live-manager/**']
+            auth-service: ['services/auth-service/**']
             web: ['web/**']
 
   test:
@@ -40,7 +42,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install; fi

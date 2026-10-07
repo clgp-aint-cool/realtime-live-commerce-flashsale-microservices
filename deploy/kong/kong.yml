@@ -1,0 +1,50 @@
+# Kong DB-less cho docker compose. Định tuyến GIỐNG apps/live-commerce/base/kong-routes.yaml
+# trong repo infra (strip_path = false), để test local phản ánh đúng hành vi trên Kubernetes.
+_format_version: "3.0"
+
+services:
+  - name: product-service
+    url: http://product-service:3002
+    routes:
+      - name: products
+        paths: [/api/products]
+        strip_path: false
+
+  - name: auth-service
+    url: http://auth-service:3006
+    routes:
+      - name: auth
+        paths: [/api/auth]
+        strip_path: false
+
+  - name: order-service
+    url: http://order-service:3003
+    routes:
+      - name: orders
+        paths: [/api/orders]
+        strip_path: false
+
+  # Người bán, phiên live, danh sách đang live. /internal của live-manager KHÔNG được định tuyến ra ngoài.
+  - name: live-manager
+    url: http://live-manager:3005
+    routes:
+      - name: live-manager
+        paths: [/api/sellers, /api/sessions, /api/lives]
+        strip_path: false
+
+  # Kong tự proxy WebSocket (Upgrade) trên route http/https.
+  - name: chat-service
+    url: http://chat-service:3001
+    read_timeout: 3600000
+    write_timeout: 3600000
+    routes:
+      - name: chat-ws
+        paths: [/ws]
+        strip_path: false
+
+  - name: web
+    url: http://web-frontend:80   # alias của service web, xem docker-compose.yml
+    routes:
+      - name: web
+        paths: [/]
+        strip_path: false

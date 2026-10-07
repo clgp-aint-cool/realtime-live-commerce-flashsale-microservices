@@ -1,0 +1,33 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageSellerChannels",
+      "Effect": "Allow",
+      "Action": [
+        "ivs:CreateChannel",
+        "ivs:TagResource",
+        "ivs:DeleteChannel",
+        "ivs:StopStream",
+        "ivs:PutMetadata",
+        "ivs:CreateStreamKey"
+      ],
+      "Resource": [
+        "arn:aws:ivs:ap-southeast-1:<ACCOUNT_ID>:channel/*",
+        "arn:aws:ivs:ap-southeast-1:<ACCOUNT_ID>:recording-configuration/<RECORDING_CONFIGURATION_ID>"
+      ]
+    },
+    {
+      "Sid": "ManageStreamKeys",
+      "Effect": "Allow",
+      "Action": ["ivs:GetStreamKey", "ivs:DeleteStreamKey"],
+      "Resource": "arn:aws:ivs:ap-southeast-1:<ACCOUNT_ID>:stream-key/*"
+    },
+    {
+      "Sid": "ListLiveStreams",
+      "Effect": "Allow",
+      "Action": ["ivs:ListStreams"],
+      "Resource": "*"
+    }
+  ]
+}

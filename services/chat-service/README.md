@@ -1,7 +1,7 @@
 # chat-service
 
-Chat real-time (Socket.io + Redis adapter). Gốc: micro-live-chat của nelsonwenner/stream-live-system. Cổng 3001.
+Chat real-time: Socket.io (path `/ws`, chỉ transport websocket nên không cần sticky session) + Redis adapter để phát tin xuyên pod. Lưu 50 tin gần nhất mỗi phòng trong Redis. Cổng 3001.
 
-- Endpoint kiểm tra sức khỏe: `GET /healthz` (Kubernetes dùng cho readiness/liveness probe)
-- Cấu hình: biến môi trường (xem `.env.example` ở thư mục gốc repo)
+- `POST /internal/rooms/:room/system-messages` cho moderation-service (header `x-internal-token` nếu đặt `INTERNAL_API_TOKEN`)
+- `GET /healthz`, `GET /readyz`
 - Image: `<HARBOR_REGISTRY>/live-commerce/chat-service:<git-sha-8-ký-tự>`

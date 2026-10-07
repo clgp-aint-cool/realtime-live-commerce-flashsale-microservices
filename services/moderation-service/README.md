@@ -1,7 +1,7 @@
 # moderation-service
 
-Nhận webhook cảnh báo từ AWS, ghi log, thông báo vào phòng chat. Cổng 3004.
+Nhận webhook cảnh báo moderation hình ảnh từ Lambda bridge trên AWS (qua VPN → Palo Alto → NodePort), ghi log vào PostgreSQL, thông báo vào phòng chat. Idempotent theo `eventId`. Cổng 3004.
 
-- Endpoint kiểm tra sức khỏe: `GET /healthz` (Kubernetes dùng cho readiness/liveness probe)
-- Cấu hình: biến môi trường (xem `.env.example` ở thư mục gốc repo)
+- Hợp đồng webhook: [docs/local-testing.md](../../docs/local-testing.md#5-hợp-đồng-webhook-moderation-lambda-bridge--moderation-service)
+- `GET /healthz`, `GET /readyz`
 - Image: `<HARBOR_REGISTRY>/live-commerce/moderation-service:<git-sha-8-ký-tự>`

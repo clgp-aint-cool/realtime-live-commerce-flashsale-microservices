@@ -2,9 +2,24 @@
   "name": "web",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "mkdir -p dist && echo \"<h1>live-commerce web (placeholder)</h1>\" > dist/index.html",
-    "lint": "echo \"no lint yet\"",
-    "test": "echo \"no tests yet\""
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "tsc -b",
+    "test": "echo \"unit tests: chưa có, xem tests/e2e ở thư mục gốc\""
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "socket.io-client": "^4.8.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.0.0"
   }
 }
