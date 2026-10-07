@@ -58,31 +58,39 @@ jobs:
           fi
           echo "tag=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
 
-      # Harbor đang dùng chứng chỉ tự ký cấp cho "gp.lab.local", không khớp tên
-      # harbor.cmc-cloud-hcm1.cloud -> BuildKit báo x509. `insecure = true` cho BuildKit
-      # bỏ qua kiểm tra chứng chỉ khi push tới đúng registry này (vẫn dùng HTTPS).
-      # Khi Harbor có chứng chỉ đúng tên (SAN harbor.cmc-cloud-hcm1.cloud), xoá dòng insecure.
+      # BYPASS TLS (người dùng yêu cầu): Harbor dùng chứng chỉ tự ký cấp cho "gp.lab.local",
+      # không khớp tên registry. Bỏ qua kiểm tra chứng chỉ ở cấu hình buildkitd và exporter.
+      # Khi Harbor có chứng chỉ đúng tên (SAN = tên registry), xoá các tuỳ chọn insecure bên dưới.
+      - name: Check registry
+        run: |
+          REG="${REGISTRY#https://}"; REG="${REG#http://}"; REG="${REG%/}"
+          if [ -z "$REG" ]; then REG="harbor.cmc-cloud-hcm1.cloud"; fi
+          echo "REG=$REG" >> "$GITHUB_ENV"
+          echo "Registry: $REG -> $(getent hosts "$REG" || echo 'không resolve được')"
+
       - uses: docker/setup-buildx-action@v3
         with:
           driver-opts: network=host
           buildkitd-config-inline: |
-            [registry."${{ env.REGISTRY }}"]
+            [registry."${{ env.REG }}"]
+              insecure = true
+            [registry."${{ env.HARBOR_IP }}"]
               insecure = true
 
-      - uses: docker/login-action@v3
+      - name: Login to Harbor
+        uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ${{ env.REG }}
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
 
       - uses: docker/build-push-action@v6
         with:
           context: ${{ steps.ctx.outputs.dir }}
-          push: true
           provenance: false
-          tags: ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ matrix.component }}:${{ steps.ctx.outputs.tag }}
+          outputs: type=image,name=${{ env.REG }}/${{ env.PROJECT }}/${{ matrix.component }}:${{ steps.ctx.outputs.tag }},push=true,registry.insecure=true
           add-hosts: |
-            ${{ env.REGISTRY }}:${{ env.HARBOR_IP }}
+            ${{ env.REG }}:${{ env.HARBOR_IP }}
           # Tuỳ chọn: quét lỗ hổng image trước khi cho deploy (thêm bước Trivy ở đây).
 
   update-manifests:
