@@ -6,15 +6,15 @@ name: build-and-deploy-dev
 on:
   push:
     branches: [main]
-    paths: ['services/**', 'web/**']
+    paths: ["services/**", "web/**"]
 
 concurrency:
   group: deploy-dev
   cancel-in-progress: false
 
 env:
-  REGISTRY: ${{ vars.HARBOR_REGISTRY }}      # ví dụ: harbor.example.local
-  PROJECT: live-commerce
+  REGISTRY: ${{ vars.HARBOR_REGISTRY }} # ví dụ: harbor.example.local
+  PROJECT: streamplatform
 
 jobs:
   changes:
@@ -73,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: ${{ vars.INFRA_REPO }}     # ví dụ: <ORG>/live-commerce-infra
+          repository: ${{ vars.INFRA_REPO }} # ví dụ: <ORG>/live-commerce-infra
           token: ${{ secrets.INFRA_REPO_TOKEN }}
           path: infra
       - uses: imranismail/setup-kustomize@v2
