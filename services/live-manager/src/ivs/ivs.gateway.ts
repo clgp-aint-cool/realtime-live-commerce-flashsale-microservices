@@ -15,6 +15,11 @@ export interface StreamInfo {
   startTime?: string;
 }
 
+// Kênh demo do scripts/seed-demo.cjs tạo: ARN giả, phát luồng mẫu công khai của AWS, không tồn tại trên IVS.
+// Luôn coi là LIVE và không gọi IVS cho chúng.
+export const DEMO_CHANNEL_PREFIX = 'arn:demo:ivs:';
+export const isDemoChannel = (channelArn: string) => channelArn.startsWith(DEMO_CHANNEL_PREFIX);
+
 export type PutMetadataResult = 'sent' | 'not_broadcasting' | 'throttled';
 
 export abstract class IvsGateway {

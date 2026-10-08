@@ -21,6 +21,8 @@ declare global {
   }
 }
 
+const RETRY_MS = 5000;
+
 let sdkPromise: Promise<IvsSdk> | null = null;
 function loadSdk(src: string): Promise<IvsSdk> {
   sdkPromise ??= new Promise((resolve, reject) => {
@@ -57,6 +59,18 @@ export function Player({ playbackUrl, onMetadata }: { playbackUrl: string; onMet
     if (!playbackUrl || !videoRef.current) return;
     let player: IvsPlayer | null = null;
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+
+    // OBS rớt mạng thì IVS kết thúc stream (ENDED) hoặc playlist tạm 404 (ERROR). Phiên vẫn mở nên
+    // thử nạp lại định kỳ: OBS phát lại là người xem tự xem tiếp, không cần F5.
+    const reloadLater = () => {
+      clearTimeout(retry);
+      retry = setTimeout(() => {
+        if (cancelled || !player) return;
+        player.load(playbackUrl);
+        player.play();
+      }, RETRY_MS);
+    };
 
     loadSdk(config.ivsPlayerSdkUrl)
       .then((sdk) => {
@@ -64,9 +78,18 @@ export function Player({ playbackUrl, onMetadata }: { playbackUrl: string; onMet
         if (!sdk.isPlayerSupported) return setStatus('Trình duyệt không hỗ trợ IVS Player');
         player = sdk.create();
         player.attachHTMLVideoElement(videoRef.current);
-        player.addEventListener(sdk.PlayerState.PLAYING, () => setStatus(''));
-        player.addEventListener(sdk.PlayerState.ENDED, () => setStatus('Buổi live đã kết thúc'));
-        player.addEventListener(sdk.PlayerEventType.ERROR, () => setStatus('Kênh chưa phát hoặc đã dừng'));
+        player.addEventListener(sdk.PlayerState.PLAYING, () => {
+          clearTimeout(retry);
+          setStatus('');
+        });
+        player.addEventListener(sdk.PlayerState.ENDED, () => {
+          setStatus('Người bán đang mất kết nối, đang chờ phát lại…');
+          reloadLater();
+        });
+        player.addEventListener(sdk.PlayerEventType.ERROR, () => {
+          setStatus('Kênh chưa phát hoặc đã dừng');
+          reloadLater();
+        });
         player.addEventListener(sdk.PlayerEventType.TEXT_METADATA_CUE, (cue) => {
           try {
             metadataRef.current?.(JSON.parse((cue as { text: string }).text));
@@ -81,6 +104,7 @@ export function Player({ playbackUrl, onMetadata }: { playbackUrl: string; onMet
 
     return () => {
       cancelled = true;
+      clearTimeout(retry);
       player?.delete();
     };
   }, [playbackUrl]);

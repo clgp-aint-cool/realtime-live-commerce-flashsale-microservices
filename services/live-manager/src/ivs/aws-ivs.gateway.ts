@@ -22,7 +22,7 @@ const isThrottled = (err: unknown) => (err as Error)?.name === 'ThrottlingExcept
 export class AwsIvsGateway extends IvsGateway {
   readonly mode = 'aws' as const;
   private readonly logger = new Logger(AwsIvsGateway.name);
-  private readonly client = new IvsClient({ region: process.env.AWS_REGION ?? 'ap-southeast-1' });
+  private readonly client = new IvsClient({ region: process.env.AWS_REGION ?? 'ap-northeast-1' });
   private readonly recordingConfigurationArn = process.env.IVS_RECORDING_CONFIGURATION_ARN || undefined;
   private readonly channelType = (process.env.IVS_CHANNEL_TYPE ?? 'STANDARD') as ChannelType;
   private readonly latencyMode = (process.env.IVS_LATENCY_MODE ?? 'LOW') as ChannelLatencyMode;

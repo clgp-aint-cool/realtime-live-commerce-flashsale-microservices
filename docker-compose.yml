@@ -115,7 +115,7 @@ services:
       # mock: mọi kênh phát luồng demo công khai của AWS IVS
       MOCK_PLAYBACK_URL: ${MOCK_PLAYBACK_URL:-https://fcc3ddae59ed.us-west-2.playback.live-video.net/api/video/v1/us-west-2.893648527354.channel.DmumNckWFTqz.m3u8}
       # aws: IAM user quyền tối thiểu (docs/iam-live-manager-policy.json)
-      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      AWS_REGION: ${AWS_REGION:-ap-northeast-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       IVS_RECORDING_CONFIGURATION_ARN: ${IVS_RECORDING_CONFIGURATION_ARN:-}

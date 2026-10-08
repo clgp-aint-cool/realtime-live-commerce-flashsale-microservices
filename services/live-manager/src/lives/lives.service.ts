@@ -3,7 +3,7 @@ import { ProductClient } from '../common/clients';
 import { liveKeys } from '../common/live-keys';
 import { PgService } from '../common/pg.service';
 import { RedisService } from '../common/redis.service';
-import { IvsGateway, StreamInfo } from '../ivs/ivs.gateway';
+import { isDemoChannel, IvsGateway, StreamInfo } from '../ivs/ivs.gateway';
 
 interface LiveRow {
   id: string;
@@ -82,6 +82,7 @@ export class LivesService {
   }
 
   private summary(r: LiveRow, stream: StreamInfo | undefined) {
+    if (isDemoChannel(r.channel_arn)) stream = { channelArn: r.channel_arn, state: 'LIVE', viewerCount: 0 };
     return {
       sessionId: r.id,
       title: r.title,

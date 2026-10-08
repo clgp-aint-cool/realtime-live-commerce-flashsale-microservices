@@ -12,7 +12,7 @@ import { ChatClient, ProductClient } from '../common/clients';
 import { liveKeys } from '../common/live-keys';
 import { PgService } from '../common/pg.service';
 import { RedisService } from '../common/redis.service';
-import { IvsGateway, PutMetadataResult } from '../ivs/ivs.gateway';
+import { isDemoChannel, IvsGateway, PutMetadataResult } from '../ivs/ivs.gateway';
 import { SellerRow, SessionRow } from '../schema';
 
 export interface SessionProductInput {
@@ -105,11 +105,13 @@ export class SessionsService {
     if (Buffer.byteLength(payload) > METADATA_MAX_BYTES) throw new BadRequestException('Metadata vượt 1 KB');
 
     await this.pg.query('UPDATE live_sessions SET pinned_product_id = $2 WHERE id = $1', [session.id, productId]);
-    let metadata: PutMetadataResult | 'error';
-    try {
-      metadata = await this.ivs.putMetadata(seller.channel_arn, payload);
-    } catch {
-      metadata = 'error';
+    let metadata: PutMetadataResult | 'error' = 'not_broadcasting';
+    if (!isDemoChannel(seller.channel_arn)) {
+      try {
+        metadata = await this.ivs.putMetadata(seller.channel_arn, payload);
+      } catch {
+        metadata = 'error';
+      }
     }
     const socket = await this.chat.emit(sessionId, 'pin', { sessionId, productId });
     return { sessionId, pinnedProductId: productId, metadata, socket };

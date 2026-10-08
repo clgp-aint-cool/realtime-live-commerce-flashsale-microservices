@@ -74,7 +74,7 @@ Nếu bản OBS không đọc được profile (định dạng thay đổi giữ
 
 ## 4. IAM user quyền tối thiểu + Sealed Secrets
 
-Policy mẫu: [iam-live-manager-policy.json](iam-live-manager-policy.json). Thay `<ACCOUNT_ID>` và `<RECORDING_CONFIGURATION_ID>`. Region mặc định là `ap-southeast-1`.
+Policy mẫu: [iam-live-manager-policy.json](iam-live-manager-policy.json). Thay `<ACCOUNT_ID>` và `<RECORDING_CONFIGURATION_ID>`. Region mặc định là `ap-northeast-1` (Tokyo). IVS không có ở `ap-southeast-1` (Singapore).
 
 - Chỉ gồm những API code thật sự gọi: `CreateChannel` (+`TagResource` vì kênh được gắn tag `app=live-commerce`, `sellerId`), `DeleteChannel` (rollback khi đăng ký lỗi), `GetStreamKey`, `CreateStreamKey`, `DeleteStreamKey`, `StopStream`, `PutMetadata`, `ListStreams`.
 - Không cấp `GetStream` vì danh sách số người xem lấy từ `ListStreams` (một lời gọi cho mọi kênh).
@@ -106,7 +106,7 @@ Sau này có thể đặt một Lambda `channel-manager` sau API Gateway (IAM ro
 | `PRODUCT_SERVICE_URL`, `CHAT_SERVICE_URL` | | bắt buộc |
 | `INTERNAL_API_TOKEN` | | gọi chat `/internal` và bảo vệ `/internal` của live-manager |
 | `IVS_MODE` | `aws` | `mock` = không gọi AWS, trạng thái lưu trong Redis (compose mặc định `mock`) |
-| `AWS_REGION` | `ap-southeast-1` | |
+| `AWS_REGION` | `ap-northeast-1` | |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | | từ SealedSecret |
 | `IVS_RECORDING_CONFIGURATION_ARN` | | recording configuration dùng chung, gắn vào mọi kênh (để trống = không ghi hình) |
 | `IVS_CHANNEL_TYPE`, `IVS_LATENCY_MODE` | `STANDARD`, `LOW` | |
