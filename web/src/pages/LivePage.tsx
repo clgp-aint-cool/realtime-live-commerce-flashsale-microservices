@@ -6,7 +6,7 @@ import { Player } from '../components/Player';
 import { PinnedCard, Products } from '../components/Products';
 import { auth, useAuth } from '../identity';
 import { href } from '../router';
-import { avatarColor, compact, initials, LiveBadge } from '../ui';
+import { Avatar, compact, LiveBadge } from '../ui';
 
 const POLL_MS = 2000;
 const HEART_COLORS = ['#fe2c55', '#ff8a3d', '#ffd23f', '#00c6ff', '#c13cff'];
@@ -133,9 +133,7 @@ export function LivePage({ sessionId }: { sessionId: string }) {
 
           <div className="ov-top">
             <div className="host">
-              <span className="host-avatar" style={{ background: avatarColor(live.seller.id) }}>
-                {initials(live.seller.name)}
-              </span>
+              <Avatar className="host-avatar" id={live.seller.id} name={live.seller.name} url={live.seller.avatarUrl} />
               <span className="host-text">
                 <strong>{live.seller.name}</strong>
                 <small>{compact(likes)} lượt thích</small>

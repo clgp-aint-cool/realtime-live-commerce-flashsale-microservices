@@ -494,3 +494,18 @@ button.go-live { background: var(--grad-live); padding: 13px; font-size: 15px; b
   /* Nav có 4 mục (live, quản trị, bán hàng, tài khoản): giữ logo, ẩn chữ để không tràn ngang. */
   .brand strong, .brand small { display: none; }
 }
+
+/* ---------- Ảnh upload (S3) ---------- */
+.avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.thumb-avatar, .mini-avatar, .bubble-avatar, .host-avatar, .account-avatar { overflow: hidden; }
+.avatar-upload { position: relative; cursor: pointer; flex: none; display: inline-block; }
+.avatar-upload.busy { opacity: 0.6; cursor: progress; }
+.avatar-edit {
+  position: absolute; right: -2px; bottom: -2px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--panel); color: var(--brand); border: 1px solid var(--line); box-shadow: 0 1px 4px #0003;
+}
+.account-head { display: flex; align-items: center; gap: 14px; margin: 6px 0 10px; }
+.product-preview { position: relative; cursor: pointer; }
+.preview-hint {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 4px; font-size: 11px; text-align: center; color: #fff; background: #0009;
+}

@@ -10,6 +10,7 @@ interface LiveRow {
   title: string;
   seller_id: string;
   seller_name: string;
+  seller_avatar_url: string | null;
   channel_arn: string;
   playback_url: string;
   pinned_product_id: number | null;
@@ -19,7 +20,7 @@ interface LiveRow {
 
 const LIVE_SELECT = `
   SELECT s.id, s.title, s.status, s.pinned_product_id, s.started_at,
-         se.id AS seller_id, se.name AS seller_name, se.channel_arn, se.playback_url
+         se.id AS seller_id, se.name AS seller_name, se.avatar_url AS seller_avatar_url, se.channel_arn, se.playback_url
   FROM live_sessions s JOIN sellers se ON se.id = s.seller_id`;
 
 // Thông tin công khai cho người xem: KHÔNG có stream key, ingest endpoint hay channel ARN.
@@ -86,7 +87,7 @@ export class LivesService {
     return {
       sessionId: r.id,
       title: r.title,
-      seller: { id: r.seller_id, name: r.seller_name },
+      seller: { id: r.seller_id, name: r.seller_name, avatarUrl: r.seller_avatar_url },
       playbackUrl: r.playback_url,
       streamState: stream?.state ?? 'OFFLINE',
       viewerCount: stream?.viewerCount ?? 0,

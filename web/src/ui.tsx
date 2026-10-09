@@ -27,6 +27,15 @@ export function avatarColor(id: string, soft = false) {
     : `linear-gradient(135deg, ${a}, ${b})`;
 }
 
+// Avatar: ảnh (S3) nếu có, không thì chữ cái đầu trên nền màu theo id.
+export function Avatar({ className, id, name, url }: { className: string; id: string; name: string; url?: string | null }) {
+  return (
+    <span className={className} style={{ background: avatarColor(id) }}>
+      {url ? <img className="avatar-img" src={url} alt="" /> : initials(name)}
+    </span>
+  );
+}
+
 export function LiveBadge({ live, viewers }: { live: boolean; viewers?: number }) {
   if (!live) return <span className="badge">Chưa phát</span>;
   return (

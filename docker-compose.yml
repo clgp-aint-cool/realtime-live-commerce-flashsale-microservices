@@ -21,6 +21,18 @@ x-common-env: &common-env
   REDIS_URL: redis://redis:6379
   DATABASE_URL: postgres://${POSTGRES_USER:-live}:${POSTGRES_PASSWORD:-live}@postgres:5432/${POSTGRES_DB:-livecommerce}
 
+# Ảnh sản phẩm/avatar: S3. Local dùng RustFS (service s3); K8s trỏ tới Object Storage của CMC Cloud.
+# Container gọi s3:9000, trình duyệt PUT/GET qua localhost:9000 (S3_PRESIGN_ENDPOINT, S3_PUBLIC_URL).
+x-s3-env: &s3-env
+  S3_ENDPOINT: ${S3_ENDPOINT:-http://s3:9000}
+  S3_PRESIGN_ENDPOINT: ${S3_PRESIGN_ENDPOINT:-http://localhost:9000}
+  S3_PUBLIC_URL: ${S3_PUBLIC_URL:-http://localhost:9000/live-commerce-media}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:-live-commerce-media}
+  S3_FORCE_PATH_STYLE: "true"
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-s3-dev}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-s3-dev-secret}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -46,6 +58,33 @@ services:
       timeout: 3s
       retries: 20
 
+  # S3 local (RustFS, tương thích MinIO/S3: kiểm tra chữ ký, policy, CORS như S3 thật). Console: localhost:9001
+  s3:
+    image: rustfs/rustfs:latest
+    ports: ["9000:9000", "9001:9001"]
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-s3-dev}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-s3-dev-secret}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    volumes: [s3data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9000/health || wget -qO- http://localhost:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Tạo bucket + policy đọc công khai products/, avatars/ + CORS (cùng script dùng cho CMC Cloud).
+  s3-init:
+    image: live-commerce/live-manager:local
+    depends_on:
+      s3: { condition: service_healthy }
+    working_dir: /app
+    command: ["node", "s3-setup.cjs"]
+    volumes: ["./scripts/s3-setup.cjs:/app/s3-setup.cjs:ro"]
+    environment:
+      <<: *s3-env
+      S3_CORS_ORIGINS: ${S3_CORS_ORIGINS:-http://localhost:8000}
+
   product-service:
     <<: *service-defaults
     build: ./services/product-service
@@ -66,6 +105,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-live}:${POSTGRES_PASSWORD:-live}@postgres:5432/${POSTGRES_DB:-livecommerce}
       PORT: "3006"
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-me-0123456789abcdef}
+      <<: *s3-env
 
   order-service:
     <<: *service-defaults
@@ -105,7 +145,7 @@ services:
       product-service: { condition: service_healthy }
       chat-service: { condition: service_healthy }
     environment:
-      <<: *common-env
+      <<: [*common-env, *s3-env]
       PORT: "3005"
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
       PRODUCT_SERVICE_URL: http://product-service:3002
@@ -215,3 +255,4 @@ services:
 
 volumes:
   pgdata:
+  s3data:

@@ -1,5 +1,6 @@
 import { Logger, Module, OnModuleInit } from '@nestjs/common';
 import { ChatClient, ProductClient } from './common/clients';
+import { ObjectStorage } from './common/object-storage';
 import { PgService } from './common/pg.service';
 import { RedisService } from './common/redis.service';
 import { HealthController } from './health.controller';
@@ -21,6 +22,7 @@ import { SessionsService } from './sessions/sessions.service';
     RedisService,
     ProductClient,
     ChatClient,
+    ObjectStorage,
     {
       provide: IvsGateway,
       inject: [RedisService],

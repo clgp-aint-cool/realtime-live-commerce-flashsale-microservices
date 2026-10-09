@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Header, HttpCode, Post, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Header, HttpCode, Post, Put, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { AdminGuard } from '../common/admin.guard';
 import { ProductClient } from '../common/clients';
@@ -41,6 +41,23 @@ export class SellersController {
   addProduct(@CurrentSeller() seller: SellerRow, @Body() body: Record<string, unknown>) {
     const { name, price, description, imageUrl } = body ?? {};
     return this.products.create(seller.id, { name, price, description, imageUrl });
+  }
+
+  // Xin URL upload ảnh lên S3: { kind: 'avatar' | 'product', contentType, size }.
+  // Trả { uploadUrl, headers, publicUrl }: trình duyệt PUT file vào uploadUrl, sau đó dùng publicUrl
+  // làm imageUrl khi thêm sản phẩm, hoặc gửi PUT /api/sellers/me/avatar.
+  @Post('me/uploads')
+  @UseGuards(SellerGuard)
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  upload(@CurrentSeller() seller: SellerRow, @Body() body: { kind?: unknown; contentType?: unknown; size?: unknown }) {
+    return this.sellers.uploadImage(seller, body?.kind, body?.contentType, body?.size);
+  }
+
+  @Put('me/avatar')
+  @UseGuards(SellerGuard)
+  setAvatar(@CurrentSeller() seller: SellerRow, @Body() body: { avatarUrl?: unknown }) {
+    return this.sellers.setAvatar(seller, body?.avatarUrl ?? null);
   }
 
   // Stream key chỉ trả cho chính người bán, không bao giờ xuất hiện trong API công khai.

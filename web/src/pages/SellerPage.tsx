@@ -1,11 +1,11 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { api, ApiError, formatVnd, LiveDetail, Product, SellerProfile } from '../api';
+import { api, ApiError, formatVnd, IMAGE_TYPES, LiveDetail, Product, SellerProfile, uploadImage } from '../api';
 import {
   BagIcon, CloudIcon, CopyIcon, DownloadIcon, EyeIcon, ImageIcon, KeyIcon, LiveIcon, LogoutIcon, PackageIcon, PinIcon,
   PlusIcon, RefreshIcon, ServerIcon, StopIcon, StoreIcon, WalletIcon,
 } from '../components/Icons';
 import { href } from '../router';
-import { avatarColor, initials, LiveBadge } from '../ui';
+import { Avatar, LiveBadge } from '../ui';
 
 const TOKEN_KEY = 'lc.sellerToken';
 const errorText = (err: unknown) => (err instanceof ApiError ? `Lỗi ${err.status}: ${err.message}` : 'Lỗi mạng');
@@ -78,9 +78,7 @@ export function SellerPage() {
   return (
     <main className="studio">
       <div className="studio-head">
-        <span className="host-avatar big" style={{ background: avatarColor(profile.id) }}>
-          {initials(profile.name)}
-        </span>
+        <SellerAvatar token={token} profile={profile} onChange={setProfile} onError={setError} />
         <div className="grow">
           <span className="eyebrow">Creator Studio</span>
           <h2>{profile.name}</h2>
@@ -92,6 +90,7 @@ export function SellerPage() {
           <LogoutIcon size={16} /> Đăng xuất
         </button>
       </div>
+      {error && <div className="notice err">{error}</div>}
       {profile.ivsMode === 'mock' && (
         <div className="notice info">IVS đang chạy chế độ mock (local): server/key là giả, player phát luồng demo.</div>
       )}
@@ -101,6 +100,41 @@ export function SellerPage() {
       </div>
       <ProductManager token={token} profile={profile} catalog={catalog} onAdded={loadCatalog} />
     </main>
+  );
+}
+
+// Bấm vào avatar để đổi ảnh: upload lên S3 rồi lưu URL vào hồ sơ người bán.
+function SellerAvatar({
+  token,
+  profile,
+  onChange,
+  onError,
+}: {
+  token: string;
+  profile: SellerProfile;
+  onChange: (p: SellerProfile) => void;
+  onError: (text: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const url = await uploadImage(file, (f) => api.sellerUpload(token, 'avatar', f));
+      onChange(await api.setSellerAvatar(token, url));
+      onError('');
+    } catch (err) {
+      onError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <label className={busy ? 'avatar-upload busy' : 'avatar-upload'} title="Đổi ảnh đại diện">
+      <Avatar className="host-avatar big" id={profile.id} name={profile.name} url={profile.avatarUrl} />
+      <span className="avatar-edit"><ImageIcon size={14} /></span>
+      <input type="file" accept={IMAGE_TYPES.join(',')} hidden disabled={busy} onChange={(e) => pick(e.target.files?.[0])} />
+    </label>
   );
 }
 
@@ -364,12 +398,28 @@ function ProductManager({
   const [form, setForm] = useState(EMPTY_PRODUCT);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const mine = catalog.filter((p) => p.sellerId === profile.id);
   const price = Number(form.price);
   const valid = form.name.trim().length >= 2 && Number.isInteger(price) && price >= 1000;
   const set = (field: keyof typeof EMPTY_PRODUCT) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  // Ảnh sản phẩm upload thẳng lên S3; form chỉ giữ URL công khai trả về.
+  const pickImage = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const imageUrl = await uploadImage(file, (f) => api.sellerUpload(token, 'product', f));
+      setForm((f) => ({ ...f, imageUrl }));
+      setMsg(null);
+    } catch (err) {
+      setMsg({ ok: false, text: errorText(err) });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -404,15 +454,17 @@ function ProductManager({
       </div>
       {open && (
         <form className="product-form" onSubmit={submit}>
-          <div className="product-preview">
+          <label className="product-preview" title="Chọn ảnh sản phẩm (JPEG/PNG/WebP, tối đa 5 MB)">
             {/^https?:\/\//.test(form.imageUrl.trim()) ? <img src={form.imageUrl.trim()} alt="" /> : <ImageIcon size={32} />}
-          </div>
+            <span className="preview-hint">{uploading ? 'Đang tải lên…' : 'Chọn ảnh'}</span>
+            <input type="file" accept={IMAGE_TYPES.join(',')} hidden disabled={uploading} onChange={(e) => pickImage(e.target.files?.[0])} />
+          </label>
           <div className="product-fields">
             <input placeholder="Tên sản phẩm *" value={form.name} maxLength={80} onChange={set('name')} />
             <input type="number" placeholder="Giá (₫) *, tối thiểu 1.000" min={1000} step={1000} value={form.price} onChange={set('price')} />
-            <input placeholder="Link ảnh https://… (bỏ trống = ảnh ngẫu nhiên)" value={form.imageUrl} maxLength={500} onChange={set('imageUrl')} />
+            <input placeholder="Hoặc dán link ảnh https://… (bỏ trống = ảnh ngẫu nhiên)" value={form.imageUrl} maxLength={500} onChange={set('imageUrl')} />
             <textarea placeholder="Mô tả ngắn" value={form.description} maxLength={500} rows={2} onChange={set('description')} />
-            <button disabled={busy || !valid}>{busy ? 'Đang lưu…' : 'Lưu sản phẩm'}</button>
+            <button disabled={busy || uploading || !valid}>{busy ? 'Đang lưu…' : 'Lưu sản phẩm'}</button>
           </div>
         </form>
       )}

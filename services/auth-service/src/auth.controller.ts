@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Header, Headers, HttpCode, Post, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Header, Headers, HttpCode, Post, Put, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 
 const USERNAME_PATTERN = /^[a-z0-9_.]{3,32}$/;
@@ -21,6 +21,12 @@ function password(value: unknown): string {
     throw new BadRequestException('Mật khẩu dài 8-128 ký tự');
   }
   return value;
+}
+
+function bearer(authorization: string | undefined): string {
+  const match = /^Bearer\s+(\S+)$/i.exec(authorization ?? '');
+  if (!match) throw new UnauthorizedException('Thiếu Authorization: Bearer <token>');
+  return match[1];
 }
 
 @Controller('api/auth')
@@ -50,8 +56,21 @@ export class AuthController {
   @Get('me')
   @Header('Cache-Control', 'no-store')
   me(@Headers('authorization') authorization?: string) {
-    const match = /^Bearer\s+(\S+)$/i.exec(authorization ?? '');
-    if (!match) throw new UnauthorizedException('Thiếu Authorization: Bearer <token>');
-    return this.auth.me(match[1]);
+    return this.auth.me(bearer(authorization));
+  }
+
+  // Xin URL upload avatar lên S3: { contentType, size } -> { uploadUrl, headers, publicUrl }.
+  // Trình duyệt PUT file vào uploadUrl rồi gửi PUT /api/auth/me/avatar { avatarUrl: publicUrl }.
+  @Post('me/avatar/upload')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  avatarUpload(@Headers('authorization') authorization: string | undefined, @Body() body: { contentType?: unknown; size?: unknown }) {
+    return this.auth.avatarUpload(bearer(authorization), body?.contentType, body?.size);
+  }
+
+  @Put('me/avatar')
+  @Header('Cache-Control', 'no-store')
+  setAvatar(@Headers('authorization') authorization: string | undefined, @Body() body: { avatarUrl?: unknown }) {
+    return this.auth.setAvatar(bearer(authorization), body?.avatarUrl ?? null);
   }
 }

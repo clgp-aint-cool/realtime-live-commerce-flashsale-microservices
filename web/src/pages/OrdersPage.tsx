@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { api, formatVnd, Order, Product } from '../api';
-import { LogoutIcon, PackageIcon } from '../components/Icons';
+import { api, ApiError, formatVnd, IMAGE_TYPES, Order, Product, uploadImage } from '../api';
+import { ImageIcon, LogoutIcon, PackageIcon } from '../components/Icons';
 import { auth, useAuth } from '../identity';
 import { href } from '../router';
+import { Avatar } from '../ui';
 
 // Lịch sử đơn của tài khoản đang đăng nhập (mọi phiên live).
 export function OrdersPage() {
@@ -10,6 +11,8 @@ export function OrdersPage() {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [products, setProducts] = useState<Map<number, Product>>(new Map());
   const [error, setError] = useState('');
+  const [avatarMsg, setAvatarMsg] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!session) return;
@@ -20,6 +23,22 @@ export function OrdersPage() {
       })
       .catch(() => setError('Không tải được đơn hàng'));
   }, [session]);
+
+  // Avatar người mua: upload lên S3, auth-service chỉ lưu URL.
+  const pickAvatar = async (file: File | undefined) => {
+    if (!file || !session) return;
+    setUploading(true);
+    try {
+      const url = await uploadImage(file, (f) => api.userAvatarUpload(session.token, f));
+      const user = await api.setUserAvatar(session.token, url);
+      auth.set({ token: session.token, user });
+      setAvatarMsg('');
+    } catch (err) {
+      setAvatarMsg(err instanceof ApiError ? `Lỗi ${err.status}: ${err.message}` : 'Lỗi mạng');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   if (!session) {
     return (
@@ -44,9 +63,17 @@ export function OrdersPage() {
             <LogoutIcon size={16} /> Đăng xuất
           </button>
         </div>
-        <p className="muted small">
-          {session.user.displayName} (@{session.user.username}) · tổng chi tiêu {formatVnd(total)}
-        </p>
+        <div className="account-head">
+          <label className={uploading ? 'avatar-upload busy' : 'avatar-upload'} title="Đổi ảnh đại diện">
+            <Avatar className="host-avatar big" id={session.user.id} name={session.user.displayName} url={session.user.avatarUrl} />
+            <span className="avatar-edit"><ImageIcon size={14} /></span>
+            <input type="file" accept={IMAGE_TYPES.join(',')} hidden disabled={uploading} onChange={(e) => pickAvatar(e.target.files?.[0])} />
+          </label>
+          <p className="muted small">
+            {session.user.displayName} (@{session.user.username}) · tổng chi tiêu {formatVnd(total)}
+          </p>
+        </div>
+        {avatarMsg && <div className="notice err">{avatarMsg}</div>}
         {orders.length === 0 && (
           <div className="empty">
             Chưa có đơn nào. <a href={href.lives}>Vào xem live</a> và bấm "Mua ngay" nhé.

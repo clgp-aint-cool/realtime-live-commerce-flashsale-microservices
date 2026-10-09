@@ -8,7 +8,7 @@ import { LivesPage } from './pages/LivesPage';
 import { OrdersPage } from './pages/OrdersPage';
 import { SellerPage } from './pages/SellerPage';
 import { href, useRoute } from './router';
-import { avatarColor, initials } from './ui';
+import { Avatar } from './ui';
 
 export function App() {
   const route = useRoute();
@@ -42,9 +42,7 @@ export function App() {
           </a>
           {session ? (
             <a className={`account ${active('orders')}`} href={href.orders} title="Đơn hàng của tôi">
-              <span className="account-avatar" style={{ background: avatarColor(session.user.id) }}>
-                {initials(session.user.displayName)}
-              </span>
+              <Avatar className="account-avatar" id={session.user.id} name={session.user.displayName} url={session.user.avatarUrl} />
               <span className="account-name">{session.user.displayName}</span>
             </a>
           ) : (

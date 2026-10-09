@@ -1,6 +1,7 @@
-import { ConflictException, HttpException, HttpStatus, Injectable, Logger, OnModuleInit, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { env } from './common/env';
+import { ObjectStorage } from './common/object-storage';
 import { signJwt, verifyJwt } from './common/jwt';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './common/password';
 import { PgService } from './common/pg.service';
@@ -14,6 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login_at TIMESTAMPTZ
 );
+-- Ảnh đại diện nằm trên S3 của CMC Cloud; DB chỉ giữ URL công khai.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 `;
 
 interface UserRow {
@@ -21,6 +24,7 @@ interface UserRow {
   username: string;
   display_name: string;
   password_hash: string;
+  avatar_url: string | null;
   created_at: Date;
 }
 
@@ -37,7 +41,10 @@ export class AuthService implements OnModuleInit {
   private readonly ttlSeconds = Number(process.env.JWT_TTL_SECONDS ?? 7 * 24 * 3600);
   private readonly failures = new Map<string, { count: number; until: number }>();
 
-  constructor(private readonly pg: PgService) {
+  constructor(
+    private readonly pg: PgService,
+    private readonly storage: ObjectStorage,
+  ) {
     if (this.secret.length < 32) throw new Error('JWT_SECRET phải dài ít nhất 32 ký tự');
   }
 
@@ -75,11 +82,35 @@ export class AuthService implements OnModuleInit {
   }
 
   async me(token: string) {
+    return this.toDto(await this.currentUser(token));
+  }
+
+  // Thư mục trên S3 của từng người dùng: client không tự chọn được đường dẫn.
+  private static avatarPrefix = (userId: string) => `avatars/users/${userId}`;
+
+  async avatarUpload(token: string, contentType: unknown, size: unknown) {
+    const user = await this.currentUser(token);
+    return this.storage.presignImage(AuthService.avatarPrefix(user.id), contentType, size);
+  }
+
+  // Gán avatar sau khi trình duyệt đã PUT xong lên S3. null = bỏ avatar. Ảnh cũ bị xóa khỏi bucket.
+  async setAvatar(token: string, url: unknown) {
+    const user = await this.currentUser(token);
+    const prefix = AuthService.avatarPrefix(user.id);
+    if (url !== null && (typeof url !== 'string' || !this.storage.owns(url, prefix))) {
+      throw new BadRequestException('avatarUrl phải là ảnh vừa upload qua /api/auth/me/avatar/upload');
+    }
+    const { rows } = await this.pg.query<UserRow>('UPDATE users SET avatar_url = $2 WHERE id = $1 RETURNING *', [user.id, url]);
+    if (user.avatar_url && user.avatar_url !== url) await this.storage.remove(user.avatar_url, prefix);
+    return this.toDto(rows[0]);
+  }
+
+  private async currentUser(token: string) {
     const claims = verifyJwt(this.secret, token);
     if (!claims) throw new UnauthorizedException('Phiên đăng nhập hết hạn, vui lòng đăng nhập lại');
     const { rows } = await this.pg.query<UserRow>('SELECT * FROM users WHERE id = $1', [claims.sub]);
     if (!rows[0]) throw new UnauthorizedException('Tài khoản không còn tồn tại');
-    return this.toDto(rows[0]);
+    return rows[0];
   }
 
   private session(user: UserRow) {
@@ -90,7 +121,13 @@ export class AuthService implements OnModuleInit {
   }
 
   private toDto(user: UserRow) {
-    return { id: user.id, username: user.username, displayName: user.display_name, createdAt: user.created_at };
+    return {
+      id: user.id,
+      username: user.username,
+      displayName: user.display_name,
+      avatarUrl: user.avatar_url,
+      createdAt: user.created_at,
+    };
   }
 
   private checkThrottle(username: string) {

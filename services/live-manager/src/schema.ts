@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS sellers (
   stream_key_arn  TEXT,              -- chỉ lưu ARN; giá trị key lấy bằng GetStreamKey khi cần
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Ảnh đại diện nằm trên S3 của CMC Cloud; DB chỉ giữ URL công khai.
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
 CREATE TABLE IF NOT EXISTS live_sessions (
   id                UUID PRIMARY KEY,
@@ -40,6 +42,7 @@ export interface SellerRow {
   ingest_endpoint: string;
   playback_url: string;
   stream_key_arn: string | null;
+  avatar_url: string | null;
   created_at: Date;
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, LiveSummary } from '../api';
 import { BoltIcon, CloudIcon, EyeIcon, LiveIcon, ServerIcon, ShieldIcon, StoreIcon } from '../components/Icons';
 import { href } from '../router';
-import { avatarColor, initials, LiveBadge } from '../ui';
+import { Avatar, avatarColor, LiveBadge } from '../ui';
 
 const POLL_MS = 5000;
 
@@ -85,15 +85,11 @@ export function LivesPage() {
               <span className="viewers">
                 <EyeIcon size={13} /> {l.viewerCount}
               </span>
-              <span className="thumb-avatar" style={{ background: avatarColor(l.seller.id) }}>
-                {initials(l.seller.name)}
-              </span>
+              <Avatar className="thumb-avatar" id={l.seller.id} name={l.seller.name} url={l.seller.avatarUrl} />
               <span className="thumb-title">{l.title}</span>
             </div>
             <div className="live-info">
-              <span className="mini-avatar" style={{ background: avatarColor(l.seller.id) }}>
-                {initials(l.seller.name)}
-              </span>
+              <Avatar className="mini-avatar" id={l.seller.id} name={l.seller.name} url={l.seller.avatarUrl} />
               <span className="muted">{l.seller.name}</span>
             </div>
           </a>

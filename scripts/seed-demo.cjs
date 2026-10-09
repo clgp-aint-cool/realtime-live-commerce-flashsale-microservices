@@ -8,7 +8,8 @@
 //     < scripts/seed-demo.cjs
 //
 // SEED_MODE=clean: kết thúc phiên demo, xóa kho Redis của chúng (giữ người bán/sản phẩm vì đơn hàng có thể tham chiếu).
-// Biến: DATABASE_URL, REDIS_URL (từ live-manager-secret), DEMO_PLAYBACK_URL (mặc định luồng mẫu của AWS).
+// Biến: DATABASE_URL, REDIS_URL (từ live-manager-secret), DEMO_PLAYBACK_URL (đặt thì mọi người bán dùng chung 1 luồng;
+// mặc định chia lần lượt các luồng mẫu 24/7 công khai của AWS, lấy từ https://ivs.rocks/live/).
 'use strict';
 const { createHash, randomBytes } = require('node:crypto');
 const { Pool } = require('pg');
@@ -16,9 +17,14 @@ const Redis = require('ioredis');
 
 // Kênh demo: ARN giả có tiền tố này. live-manager coi là luôn LIVE và không gọi IVS cho chúng.
 const DEMO_PREFIX = 'arn:demo:ivs:';
-const PLAYBACK =
-  process.env.DEMO_PLAYBACK_URL ||
-  'https://fcc3ddae59ed.us-west-2.playback.live-video.net/api/video/v1/us-west-2.893648527354.channel.DmumNckWFTqz.m3u8';
+const PLAYBACKS = process.env.DEMO_PLAYBACK_URL
+  ? [process.env.DEMO_PLAYBACK_URL]
+  : [
+      'https://fcc3ddae59ed.us-west-2.playback.live-video.net/api/video/v1/us-west-2.893648527354.channel.DmumNckWFTqz.m3u8',
+      'https://4c62a87c1810.us-west-2.playback.live-video.net/api/video/v1/us-west-2.049054135175.channel.LaSuL3bHBRR7.m3u8', // 1080p ngang
+      'https://4c62a87c1810.us-west-2.playback.live-video.net/api/video/v1/us-west-2.049054135175.channel.WP4bWqiALo67.m3u8', // 1080p vuông
+      'https://4c62a87c1810.us-west-2.playback.live-video.net/api/video/v1/us-west-2.049054135175.channel.iNMK0w9JnUkC.m3u8', // 1080p dọc
+    ];
 
 // UUID cố định theo tên để chạy lại không tạo trùng.
 const uuidFrom = (s) => {
@@ -287,14 +293,15 @@ async function main() {
     }
 
     let products = 0;
-    for (const [slug, name, title, items] of SELLERS) {
+    for (const [i, [slug, name, title, items]] of SELLERS.entries()) {
       const sellerId = uuidFrom(slug);
+      const playback = PLAYBACKS[i % PLAYBACKS.length];
       // Token ngẫu nhiên không lưu ở đâu: người bán demo không đăng nhập được, chỉ để hiển thị.
       await pg.query(
         `INSERT INTO sellers (id, name, token_hash, channel_arn, ingest_endpoint, playback_url, stream_key_arn)
          VALUES ($1, $2, $3, $4, 'demo', $5, NULL)
          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, playback_url = EXCLUDED.playback_url`,
-        [sellerId, name, createHash('sha256').update(randomBytes(32)).digest('hex'), `${DEMO_PREFIX}channel/${slug}`, PLAYBACK],
+        [sellerId, name, createHash('sha256').update(randomBytes(32)).digest('hex'), `${DEMO_PREFIX}channel/${slug}`, playback],
       );
 
       const productIds = [];
