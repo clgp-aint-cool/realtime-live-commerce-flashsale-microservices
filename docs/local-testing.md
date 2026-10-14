@@ -106,13 +106,15 @@ Phản hồi `200 {"result":"notified"|"duplicate"}`; `502` khi chưa báo đư�
 
 | Service | Biến |
 |---|---|
-| product | `PORT`, `DATABASE_URL`, `INTERNAL_API_TOKEN` (bảo vệ `/internal/products`) |
+| product | `PORT`, `DATABASE_URL`, `INTERNAL_API_TOKEN` (bảo vệ `/internal/products`), `DATABASE_READ_HOSTS` |
 | order | `PORT`, `DATABASE_URL`, `REDIS_URL`, `PG_POOL_MAX` (mặc định 10), `JWT_SECRET`, `ALLOW_GUEST_ORDERS` (mặc định `true`; prod nên `false`) |
 | auth | `PORT` (3006), `DATABASE_URL`, `JWT_SECRET` (≥ 32 ký tự, **giống** order-service) |
 | chat | `PORT`, `REDIS_URL`, `INTERNAL_API_TOKEN` (tùy chọn) |
 | moderation | `PORT`, `DATABASE_URL`, `CHAT_SERVICE_URL`, `LIVE_MANAGER_URL`, `CHAT_ROOM` (dự phòng), `WEBHOOK_SHARED_SECRET`, `INTERNAL_API_TOKEN` |
 | live-manager | xem [live-manager.md](live-manager.md#5-biến-môi-trường-live-manager) |
 | web | `IVS_PLAYER_SDK_URL` (playback URL lấy theo phiên từ API) |
+
+`DATABASE_READ_HOSTS` (product, live-manager; tùy chọn): danh sách `host[:port]` các slave PostgreSQL, cách nhau dấu phẩy. Dùng chung user/mật khẩu/db với `DATABASE_URL`. Chỉ các đọc người xem poll liên tục đi slave: `GET /api/lives`, `GET /api/lives/:id`, `GET /api/products` không có `sellerId`. Slave lỗi kết nối thì đọc master 30 giây. `PG_READ_POOL_MAX` mặc định bằng `PG_POOL_MAX`. Local để trống.
 
 ## 7. Checklist khi chuyển sang repo infra (K8s)
 

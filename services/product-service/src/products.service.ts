@@ -48,11 +48,12 @@ export class ProductsService implements OnModuleInit {
     await this.pg.migrate(MIGRATION);
   }
 
-  // sellerId: chỉ trả sản phẩm dùng chung + sản phẩm của người bán đó.
+  // sellerId: chỉ trả sản phẩm dùng chung + sản phẩm của người bán đó. Đọc master vì người bán vừa thêm sản phẩm
+  // là xem lại ngay. Danh mục chung (trang web, live-manager tải lại khi thiếu id) đọc slave.
   async list(sellerId?: string) {
     const { rows } = sellerId
       ? await this.pg.query<ProductRow>('SELECT * FROM products WHERE seller_id IS NULL OR seller_id = $1 ORDER BY id', [sellerId])
-      : await this.pg.query<ProductRow>('SELECT * FROM products ORDER BY id');
+      : await this.pg.reader()<ProductRow>('SELECT * FROM products ORDER BY id');
     return rows.map((row) => this.toDto(row));
   }
 

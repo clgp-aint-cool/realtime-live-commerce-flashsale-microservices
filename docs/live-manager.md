@@ -102,6 +102,7 @@ Sau này có thể đặt một Lambda `channel-manager` sau API Gateway (IAM ro
 |---|---|---|
 | `PORT` | 3005 | |
 | `DATABASE_URL`, `REDIS_URL` | | bắt buộc |
+| `DATABASE_READ_HOSTS` | trống | Slave PostgreSQL `host[:port],...` cho `GET /api/lives` và `/api/lives/:id`. Không thấy phiên trên slave thì hỏi lại master trước khi trả 404 |
 | `ADMIN_TOKEN` | | bắt buộc, đăng ký người bán |
 | `PRODUCT_SERVICE_URL`, `CHAT_SERVICE_URL` | | bắt buộc |
 | `INTERNAL_API_TOKEN` | | gọi chat `/internal` và bảo vệ `/internal` của live-manager |

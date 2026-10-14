@@ -39,19 +39,26 @@ export class LivesService {
     private readonly products: ProductClient,
   ) {}
 
+  // list/detail là hai endpoint người xem poll liên tục: đọc từ slave (DATABASE_READ_HOSTS), trễ replication vài ms không sao.
   async list() {
-    const { rows } = await this.pg.query<LiveRow>(`${LIVE_SELECT} WHERE s.status = 'OPEN' ORDER BY s.started_at DESC LIMIT 100`);
+    const { rows } = await this.pg.reader()<LiveRow>(`${LIVE_SELECT} WHERE s.status = 'OPEN' ORDER BY s.started_at DESC LIMIT 100`);
     const streams = await this.streams();
     return rows.map((r) => this.summary(r, streams.get(r.channel_arn)));
   }
 
   async detail(sessionId: string) {
-    const { rows } = await this.pg.query<LiveRow>(`${LIVE_SELECT} WHERE s.id = $1`, [sessionId]);
+    let read = this.pg.reader();
+    let { rows } = await read<LiveRow>(`${LIVE_SELECT} WHERE s.id = $1`, [sessionId]);
+    if (rows.length === 0) {
+      // Phiên vừa tạo có thể chưa kịp sang slave: hỏi lại master trước khi trả 404.
+      read = this.pg.primary();
+      ({ rows } = await read<LiveRow>(`${LIVE_SELECT} WHERE s.id = $1`, [sessionId]));
+    }
     if (rows.length === 0) throw new NotFoundException('Không có phiên live này');
     const row = rows[0];
     const [streams, items] = await Promise.all([
       this.streams(),
-      this.pg.query<{ product_id: number; initial_stock: number }>(
+      read<{ product_id: number; initial_stock: number }>(
         'SELECT product_id, initial_stock FROM session_products WHERE session_id = $1 ORDER BY position',
         [sessionId],
       ),
