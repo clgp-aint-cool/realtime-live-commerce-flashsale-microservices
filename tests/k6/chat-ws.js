@@ -21,6 +21,10 @@ const MSG_EVERY_S = Number(__ENV.MSG_EVERY_S || 10);
 
 export const options = {
   insecureSkipTLSVerify: true,
+  hosts: {
+    'dev.cmc-cloud-hcm1.cloud': '192.168.6.8',
+    'cmc-cloud-hcm1.cloud': '192.168.6.8',
+  },
   scenarios: {
     chat: {
       executor: 'ramping-vus',
