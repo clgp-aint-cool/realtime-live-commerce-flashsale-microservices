@@ -109,13 +109,17 @@ jobs:
         env:
           COMPONENTS: ${{ needs.changes.outputs.components }}
         run: |
+          set -euo pipefail
           TAG="${GITHUB_SHA::8}"
-          for c in $(echo "$COMPONENTS" | jq -r '.[]'); do
+          # COMPONENTS là mảng JSON tên service (["web","live-manager"]). Runner self-hosted không có jq: tách bằng tr.
+          for c in $(echo "$COMPONENTS" | tr -d '[]" ' | tr ',' ' '); do
             case "$c" in
               moderation-service) dir="apps/moderation/overlays/dev" ;;
               *)                  dir="apps/live-commerce/overlays/dev" ;;
             esac
-            img="${REGISTRY}/${PROJECT}/${c}"
+            # Tên image trong manifest dùng IP Harbor (node pull qua IP, xem registry-trust), không phải tên DNS
+            # mà job build đẩy lên. Cùng một registry nên tag vừa build có sẵn dưới tên IP.
+            img="${HARBOR_IP}/${PROJECT}/${c}"
             (cd "infra/${dir}" && kustomize edit set image "${img}=${img}:${TAG}")
           done
       - name: Commit and push
