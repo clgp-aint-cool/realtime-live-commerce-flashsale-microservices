@@ -21,6 +21,9 @@ CREATE INDEX IF NOT EXISTS moderation_events_received_idx ON moderation_events (
 
 export type HandleResult = 'notified' | 'duplicate' | 'notify_failed';
 
+// Giá trị trong cặp "..." của log: bỏ dấu " và xuống dòng để regexp phía Loki không cắt sai.
+const logValue = (s: string | undefined) => (s ?? '').replace(/["\r\n]+/g, ' ').trim().slice(0, 120);
+
 @Injectable()
 export class ModerationService implements OnModuleInit {
   private readonly logger = new Logger(ModerationService.name);
@@ -44,8 +47,12 @@ export class ModerationService implements OnModuleInit {
        VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (event_id) DO NOTHING`,
       [event.eventId, event.type, event.action, event.channelArn, JSON.stringify(event.labels), event.thumbnailUrl, event.occurredAt],
     );
+    // Tra phiên trước khi log: Grafana (lc-moderation-stop) tách alert theo session và in shop/title lên Discord.
+    // Giữ nguyên tiền tố "Moderation event <id>: TYPE/ACTION labels=" vì dashboard/alert regexp theo đó.
+    const session = await this.liveManager.openSession(event.channelArn);
     this.logger.warn(
-      `Moderation event ${event.eventId}: ${event.type}/${event.action} labels=${event.labels.map((l) => l.name).join(',')}`,
+      `Moderation event ${event.eventId}: ${event.type}/${event.action} labels=${event.labels.map((l) => l.name).join(',')}` +
+        ` session=${event.room ?? session?.sessionId ?? '-'} shop="${logValue(session?.sellerName)}" title="${logValue(session?.title)}"`,
     );
 
     // Chỉ một request "giành" được quyền thông báo (tránh hai lần retry đồng thời cùng gửi).
@@ -57,7 +64,7 @@ export class ModerationService implements OnModuleInit {
 
     try {
       // Ưu tiên room trong payload, sau đó phiên đang mở của kênh, cuối cùng là phòng mặc định.
-      const room = event.room ?? (await this.liveManager.openSessionId(event.channelArn)) ?? this.defaultRoom;
+      const room = event.room ?? session?.sessionId ?? this.defaultRoom;
       await this.chat.systemMessage(room, this.describe(event), 'alert');
       return 'notified';
     } catch (err) {
