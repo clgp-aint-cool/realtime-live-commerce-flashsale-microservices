@@ -86,7 +86,7 @@ export class LivesService {
       [channelArn],
     );
     if (rows.length === 0) throw new NotFoundException('Kênh không có phiên đang mở');
-    return { sessionId: rows[0].id, sellerId: rows[0].seller_id };
+    return { sessionId: rows[0].id, sellerId: rows[0].seller_id, title: rows[0].title, sellerName: rows[0].seller_name };
   }
 
   private summary(r: LiveRow, stream: StreamInfo | undefined) {
