@@ -105,16 +105,12 @@ export const ImageIcon = (p: IconProps) => (
 
 export function BrandLogo({ size = 34 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden>
-      <defs>
-        <linearGradient id="brand-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#1f6bff" />
-          <stop offset="1" stopColor="#00c6ff" />
-        </linearGradient>
-      </defs>
-      <rect width="40" height="40" rx="11" fill="url(#brand-g)" />
-      <path d="M28.5 28H13a6 6 0 1 1 1.3-11.86A7.5 7.5 0 0 1 28.4 18a5 5 0 0 1 .1 10Z" fill="#fff" opacity=".95" />
-      <path d="m18 18.5 6 3.5-6 3.5Z" fill="#fe2c55" />
-    </svg>
+    <img
+      src="/logo_cmc_live.png"
+      width={size}
+      height={size}
+      alt="CMC Live"
+      style={{ borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
+    />
   );
 }
