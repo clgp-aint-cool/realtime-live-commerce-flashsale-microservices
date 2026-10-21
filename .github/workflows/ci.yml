@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: read  # dorny/paths-filter gọi API lấy danh sách file đổi của PR
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
