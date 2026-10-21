@@ -3,7 +3,7 @@ import { IoAdapter } from '@nestjs/platform-socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import type Redis from 'ioredis';
 import type { Server, ServerOptions } from 'socket.io';
-import { createRedis } from './common/redis';
+import { createRedis, guardRedis, quitRedis } from './common/redis';
 
 // Redis adapter: tin nhắn emit ở pod này được phát qua Redis pub/sub tới mọi pod khác,
 // nên người xem ở pod A thấy tin nhắn của người xem ở pod B.
@@ -18,7 +18,7 @@ export class RedisIoAdapter extends IoAdapter {
 
   async connectToRedis(): Promise<void> {
     const pub = createRedis();
-    const sub = pub.duplicate();
+    const sub = guardRedis(pub.duplicate()); // duplicate() không mang theo listener
     this.clients = [pub, sub];
     await Promise.all([pub.ping(), sub.ping()]);
     this.adapterConstructor = createAdapter(pub, sub);
@@ -33,6 +33,6 @@ export class RedisIoAdapter extends IoAdapter {
 
   async dispose(): Promise<void> {
     await super.dispose();
-    await Promise.all(this.clients.map((c) => c.quit().catch(() => undefined)));
+    await Promise.all(this.clients.map((c) => quitRedis(c).catch(() => undefined)));
   }
 }

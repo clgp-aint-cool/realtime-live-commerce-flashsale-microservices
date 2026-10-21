@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { createRedis } from './common/redis';
+import { createRedis, quitRedis } from './common/redis';
 import { ChatMessage, MessageLevel, MessageType } from './chat.types';
 
 const HISTORY_SIZE = 50;
@@ -33,6 +33,6 @@ export class ChatStore implements OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    await this.redis.quit();
+    await quitRedis(this.redis);
   }
 }

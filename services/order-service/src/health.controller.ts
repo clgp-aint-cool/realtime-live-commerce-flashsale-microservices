@@ -9,10 +9,23 @@ export class HealthController {
     private readonly redis: RedisService,
   ) {}
 
-  // Liveness: chỉ cần process còn phản hồi.
+  // healthz: chỉ cần process còn phản hồi.
   @Get('healthz')
   healthz() {
     return { status: 'ok', service: 'order-service' };
+  }
+
+  // Liveness có kiểm tra Redis, là lưới an toàn nếu client vẫn kẹt sau failover firewall.
+  // Probe cho phép lỗi liên tục ~3 phút (failureThreshold 9 × 20s) rồi kubelet mới restart container.
+  // Không kiểm tra PostgreSQL: pool pg tự tạo lại kết nối.
+  @Get('livez')
+  async livez() {
+    try {
+      await this.redis.ping();
+      return { status: 'ok' };
+    } catch (err) {
+      throw new ServiceUnavailableException((err as Error).message);
+    }
   }
 
   // Readiness: kiểm tra cả PostgreSQL và Redis.
