@@ -1,11 +1,13 @@
-# live-commerce-app
+# realtime-live-commerce-flashsale-microservices
 
-Repo mã nguồn cho team dev của dự án Interactive Live Commerce. Dev chỉ push code vào repo này; việc triển khai do repo `live-commerce-infra` và ArgoCD đảm nhiệm.
+> Livestream bán hàng: AWS IVS + OBS, chat realtime (Socket.io + Redis), flash sale trừ kho nguyên tử (Redis Lua), kiểm duyệt AI, microservices NestJS + React, Kong gateway.
+
+Repo mã nguồn cho team dev của dự án Interactive Live Commerce. Dev chỉ push code vào repo này; việc triển khai do repo `live-commerce-hybrid-k8s-gitops-observability-dr` và ArgoCD đảm nhiệm.
 
 ## Cấu trúc
 
 ```
-live-commerce-app/
+realtime-live-commerce-flashsale-microservices/
 ├─ services/                 # NestJS 11 + TypeScript, Node 22
 │  ├─ chat-service/          # Socket.io + Redis adapter            (cổng 3001)
 │  ├─ product-service/       # danh mục sản phẩm                    (cổng 3002)
