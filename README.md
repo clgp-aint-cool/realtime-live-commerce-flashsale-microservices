@@ -1,50 +1,55 @@
 # realtime-live-commerce-flashsale-microservices
 
-> Livestream bán hàng: AWS IVS + OBS, chat realtime (Socket.io + Redis), flash sale trừ kho nguyên tử (Redis Lua), kiểm duyệt AI, microservices NestJS + React, Kong gateway.
+> Ứng dụng livestream bán hàng kiểu TikTok Shop: người bán phát live qua OBS → AWS IVS, người xem chat realtime và săn flash sale, kho được trừ nguyên tử bằng Redis Lua nên **không bán vượt**. Ảnh live được kiểm duyệt bằng AI (Rekognition).
 
-Repo mã nguồn cho team dev của dự án Interactive Live Commerce. Dev chỉ push code vào repo này; việc triển khai do repo `live-commerce-hybrid-k8s-gitops-observability-dr` và ArgoCD đảm nhiệm.
+Hạ tầng và triển khai (GitOps): [live-commerce-hybrid-k8s-gitops-observability-dr](https://github.com/clgp-aint-cool/live-commerce-hybrid-k8s-gitops-observability-dr)
 
-## Cấu trúc
+![Kiến trúc Interactive Live Commerce trên Hybrid Cloud](docs/images/architecture.png)
 
+## Kiến trúc ứng dụng
+
+```mermaid
+flowchart LR
+  obs[OBS] -->|RTMPS| ivs[AWS IVS]
+  ivs -->|HLS| web
+  web[React web] -->|/api, /ws| kong[Kong]
+  kong --> auth[auth-service]
+  kong --> live[live-manager]
+  kong --> product[product-service]
+  kong --> order[order-service]
+  kong --> chat[chat-service<br/>Socket.io]
+  order -->|Lua trừ kho| redis[(Redis)]
+  chat <--> redis
+  order & auth & live & product --> pg[(PostgreSQL)]
+  aws[AWS Lambda + Rekognition] -->|webhook qua VPN| mod[moderation-service]
+  mod -->|cảnh báo vào phòng chat| chat
 ```
-realtime-live-commerce-flashsale-microservices/
-├─ services/                 # NestJS 11 + TypeScript, Node 22
-│  ├─ chat-service/          # Socket.io + Redis adapter            (cổng 3001)
-│  ├─ product-service/       # danh mục sản phẩm                    (cổng 3002)
-│  ├─ order-service/         # Redis Lua trừ kho theo phiên + PostgreSQL (cổng 3003)
-│  ├─ moderation-service/    # nhận webhook từ AWS, báo vào chat    (cổng 3004)
-│  ├─ live-manager/          # người bán, kênh IVS, stream key, profile OBS, phiên live, ghim, sản phẩm của shop (cổng 3005)
-│  └─ auth-service/          # tài khoản người mua: đăng ký, đăng nhập, JWT (cổng 3006)
-├─ web/                      # React + Vite: danh sách live, trang xem, đăng nhập, đơn hàng, trang người bán, admin (nginx, cổng 80)
-├─ deploy/kong/kong.yml      # route Kong cho compose, giống kong-routes.yaml trên K8s
-├─ tests/e2e/                # test end-to-end (Node + socket.io-client)
-├─ tests/k6/                 # test tải mua hàng trong phiên live
-├─ docs/                     # luồng CI/CD, quy ước, test cục bộ
-├─ docker-compose.yml        # chạy full app + Kong + test
-└─ .env.example
-```
 
-## Chạy toàn bộ app cục bộ
+| Service | Cổng | Vai trò |
+|---|---|---|
+| auth-service | 3006 | Đăng ký, đăng nhập người mua, JWT |
+| live-manager | 3005 | Người bán, kênh IVS, stream key, phiên live, ghim sản phẩm |
+| product-service | 3002 | Danh mục sản phẩm |
+| order-service | 3003 | Đặt hàng: Redis Lua trừ kho theo phiên, lưu PostgreSQL |
+| chat-service | 3001 | Chat realtime, Socket.io + Redis adapter |
+| moderation-service | 3004 | Nhận webhook kiểm duyệt từ AWS, báo vào chat |
+| web | 80 | React + Vite: xem live, đơn hàng, trang người bán, admin |
+
+Stack: NestJS 11 + TypeScript (Node 22), React + Vite, PostgreSQL, Redis, Kong.
+
+## Chạy cục bộ
 
 ```bash
-cp .env.example .env          # tùy chọn: mặc định đã chạy được
-make up                       # = docker compose up -d --build
-open http://localhost:8000    # danh sách phiên live; #/login tài khoản người mua, #/orders đơn hàng, #/admin đăng ký người bán, #/seller trang người bán
-make test                     # e2e: 88 kiểm tra (tạo người bán mới: với IVS_MODE=aws là kênh IVS thật)
-make loadtest                 # k6: 5.000 request, tồn kho 100 => đúng 100 đơn
+cp .env.example .env
+make up          # docker compose: toàn bộ app + Kong, mở http://localhost:8000
+make test        # e2e: 88 kiểm tra
+make loadtest    # k6: 5.000 request, tồn kho 100 => đúng 100 đơn
 ```
 
-Người bán, OBS, IVS, IAM: [docs/live-manager.md](docs/live-manager.md). Quản lý phiên live và chuyển phiên (playbackUrl theo phiên): [docs/live-sessions.md](docs/live-sessions.md).
-Chi tiết (kiến trúc compose, API, hợp đồng webhook, checklist trước khi lên K8s): [docs/local-testing.md](docs/local-testing.md).
+Dev một service: `make infra` (chỉ PostgreSQL + Redis) rồi `npm run dev` trong thư mục service. Chi tiết: [docs/local-testing.md](docs/local-testing.md).
 
-## Dev một service
+## CI/CD
 
-```bash
-make infra                                   # chỉ PostgreSQL + Redis
-cd services/order-service && npm install && npm run dev   # đọc ../../.env
-cd web && npm install && npm run dev         # Vite proxy /api, /ws sang Kong :8000
-```
+PR chạy `ci.yml`. Merge vào `main` thì `build-and-deploy.yml` build image, đẩy lên Harbor và cập nhật tag dev trong repo infra; ArgoCD tự đồng bộ. Xem [docs/ci-cd-flow.md](docs/ci-cd-flow.md).
 
-## Luồng triển khai
-
-Xem [docs/ci-cd-flow.md](docs/ci-cd-flow.md). Tóm tắt: PR chạy `ci.yml`; merge vào `main` thì `build-and-deploy.yml` build image, đẩy lên Harbor và cập nhật tag trong repo infra cho môi trường dev; ArgoCD tự sync.
+Tài liệu khác: [live-manager](docs/live-manager.md) (OBS, IVS, IAM) · [live-sessions](docs/live-sessions.md) · [conventions](docs/conventions.md)
